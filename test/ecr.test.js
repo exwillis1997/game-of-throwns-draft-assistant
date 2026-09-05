@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import "../extension/lib/engine.js";
 const engine = globalThis.DraftAssistantEngine;
+test("does not recommend a fifth WR while both RB starter slots are empty", () => {
+  const roster = [{name:'Q',position:'QB'}, ...Array.from({length:4},(_,i)=>({name:`W${i}`,position:'WR'}))];
+  const players = [{name:'Another WR',position:'WR',fantasyProsRank:56},{name:'Available RB',position:'RB',fantasyProsRank:70},{name:'Available TE',position:'TE',fantasyProsRank:80}];
+  const ranked = engine.rankPlayers(players,{roster,currentPick:72},{rankingModel:'fantasypros-ecr'});
+  assert.deepEqual(ranked.map(p=>p.name),['Available RB','Available TE']);
+});
 test("rankings-only mode ignores unrelated projections and keeps consensus order within a position", () => {
   const players = [
     {name:"First", position:"WR", fantasyProsRank:1},

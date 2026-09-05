@@ -52,6 +52,17 @@
     return null;
   }
 
+  // ESPN uses mascot + D/ST while rankings use full franchise names.
+  const DEFENSE_NAMES = ["Houston Texans","Denver Broncos","Los Angeles Rams","Seattle Seahawks","Philadelphia Eagles","Pittsburgh Steelers","Minnesota Vikings","New England Patriots","Jacksonville Jaguars","Los Angeles Chargers","Baltimore Ravens","Kansas City Chiefs","Green Bay Packers","Detroit Lions","Buffalo Bills","Cleveland Browns","San Francisco 49ers","New Orleans Saints","Atlanta Falcons","Indianapolis Colts","Chicago Bears","Dallas Cowboys","New York Giants","Carolina Panthers","Tampa Bay Buccaneers","Tennessee Titans","Cincinnati Bengals","Las Vegas Raiders","Washington Commanders","Miami Dolphins","New York Jets","Arizona Cardinals"];
+  const DEFENSE_ALIASES = new Map();
+  for (const name of DEFENSE_NAMES) {
+    const canonical = name.toLowerCase();
+    const mascot = canonical.split(" ").at(-1);
+    for (const base of [canonical, mascot]) {
+      for (const suffix of ["", " d st", " dst", " defense", " def"]) DEFENSE_ALIASES.set(base + suffix, canonical);
+    }
+  }
+
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
 
   function normalizeName(value) {
@@ -74,6 +85,7 @@
       } else collapsed.push(parts[index]);
     }
     const normalized = collapsed.join(" ");
+    if (DEFENSE_ALIASES.has(normalized)) return DEFENSE_ALIASES.get(normalized);
     return ({
       "cameron skattebo": "cam skattebo",
       "cameron ward": "cam ward",
@@ -563,10 +575,19 @@
     const nextPick = nextPickAfter(currentPick, config.draftSlot, config.teams, config.rounds);
     const opponentPicks = opponentPicksUntilNext(currentPick, config.draftSlot, config.teams, config.rounds);
     if (config.rankingModel === "fantasypros-ecr") {
+      const offensiveConfig = { ...config, starterSlots: { ...config.starterSlots, DST: 0, K: 0 } };
+      const assigned = maxStarterAssignments(rosterCounts, offensiveConfig);
+      const required = Object.values(offensiveConfig.starterSlots).reduce((sum, count) => sum + count, 0);
       return players.filter(player => Number.isFinite(player.fantasyProsRank))
         .filter(player => !drafted.has(normalizeName(player.name)))
         .filter(player => canDraftPosition(player.position, rosterCounts, config))
         .filter(player => !isEarlyQbTeBlocked(player.position, round, config, rosterCounts))
+        .filter(player => {
+          const position = positionKey(player.position);
+          if (assigned >= required || position === "DST" || position === "K") return true;
+          // Fill offensive starters before taking offensive bench depth.
+          return maxStarterAssignments({ ...rosterCounts, [position]: (rosterCounts[position] || 0) + 1 }, offensiveConfig) > assigned;
+        })
         .map(player => ({
           ...player,
           score: -player.fantasyProsRank + 100 * sharpRosterAdjustment(player, rosterCounts, round, config),

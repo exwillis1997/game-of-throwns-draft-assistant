@@ -106,3 +106,6 @@ This replaces that source's total with 235 league points; it does not add bonuse
 ## Rankings-only exports
 
 A FantasyPros PPR export with ranks but no projections uses **FantasyPros PPR · rankings only**. Set `meta.rankingsOnly: true` to select this mode and disable models requiring unavailable inputs in the settings and overlay. It orders consensus ranks with roster-need adjustments, applies legal-roster filters, and does not invent projections, ADP, or bonus adjustments. `ECR VS. ADP` is not ESPN-specific ADP and is not used as such. Private imported data remains excluded from Git.
+
+Rankings-only mode fills offensive starter assignments before adding offensive bench depth. This is a roster-construction heuristic, not a projection model or a guarantee of draft grades. Defense names such as Texans D/ST and Houston Texans share one identity for drafted-player filtering.
+
