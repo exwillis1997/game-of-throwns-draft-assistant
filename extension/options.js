@@ -3,6 +3,14 @@
   const stored = await chrome.storage.local.get("draftAssistantConfig");
   const config = engine.loadConfig(stored.draftAssistantConfig);
   const form = document.querySelector("form");
+  try {
+    const response = await fetch(chrome.runtime.getURL("data/rankings.json"));
+    const dataset = await response.json();
+    if (dataset.meta?.rankingsOnly) {
+      config.rankingModel = "fantasypros-ecr";
+      for (const option of form.elements.rankingModel.options) option.disabled = option.value !== "fantasypros-ecr";
+    }
+  } catch { /* Settings remain available before a rankings file is installed. */ }
   form.elements.rankingModel.value = config.rankingModel;
   form.elements.draftSlot.value = config.draftSlot || "";
   form.elements.autoDraftMinSeconds.value = config.autoDraftMinSeconds || config.autoDraftSeconds || 5;
@@ -12,7 +20,7 @@
     event.preventDefault();
     const next = {
       ...config,
-      rankingModel: ["think-rmv", "sharp-value", "vegas-sharks-80", "vegas-only", "balanced-v04"].includes(form.elements.rankingModel.value)
+      rankingModel: ["fantasypros-ecr", "think-rmv", "sharp-value", "vegas-sharks-80", "vegas-only", "balanced-v04"].includes(form.elements.rankingModel.value)
         ? form.elements.rankingModel.value
         : "sharp-value",
       draftSlot: Number(form.elements.draftSlot.value) || 0,

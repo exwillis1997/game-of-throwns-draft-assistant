@@ -102,3 +102,7 @@ A player may provide `statProjections` with any of `vegasPoints`, `draftSharksPr
 ```
 
 This replaces that source's total with 235 league points; it does not add bonuses to an existing total. Omitted categories explicitly mean zero, so supply every category your projection models. Use ESPN-compatible category counts for overlapping TD/missed-field-goal categories; this module does not infer which counters an event qualifies for. For D/ST points/yards-allowed categories, provide expected games in each bucket, not season totals. Unknown categories and invalid counts produce a visible data error. ECR, ADP, and DraftSharks 3D values remain independent source inputs and are never converted from these totals.
+
+## Rankings-only exports
+
+A FantasyPros PPR export with ranks but no projections uses **FantasyPros PPR · rankings only**. Set `meta.rankingsOnly: true` to select this mode and disable models requiring unavailable inputs in the settings and overlay. It orders consensus ranks with roster-need adjustments, applies legal-roster filters, and does not invent projections, ADP, or bonus adjustments. `ECR VS. ADP` is not ESPN-specific ADP and is not used as such. Private imported data remains excluded from Git.

@@ -25,6 +25,7 @@
   const playersByName = new Map(dataset.players.map((player) => [engine.normalizeName(player.name), player]));
   const stored = await chrome.storage.local.get(["draftAssistantConfig", "manualDrafted"]);
   let config = engine.loadConfig(stored.draftAssistantConfig);
+  if (dataset.meta.rankingsOnly) config.rankingModel = "fantasypros-ecr";
   await chrome.storage.local.set({ draftAssistantConfig: config });
   let manualDrafted = stored.manualDrafted || [];
   const draftSessionId = new URL(window.location.href).searchParams.get("leagueId") || "draft";
@@ -73,6 +74,7 @@
         <div class="got-model-row">
           <label>Ranking model
             <select class="got-model" aria-label="Ranking model">
+              <option value="fantasypros-ecr">FantasyPros PPR · rankings only</option>
               <option value="think-rmv">Think · Pro RMV experimental</option>
               <option value="sharp-value">Sharp value · new</option>
               <option value="vegas-sharks-80">Vegas 80 / DraftSharks 20 · RB/WR priority</option>
@@ -129,6 +131,9 @@
   const autoDraftMinInput = $(".got-auto-min");
   const autoDraftMaxInput = $(".got-auto-max");
   slotInput.value = config.draftSlot || "";
+  if (dataset.meta.rankingsOnly) {
+    for (const option of modelSelect.options) option.disabled = option.value !== "fantasypros-ecr";
+  }
   modelSelect.value = config.rankingModel;
   positionSelect.value = ["ALL", "QB", "RB", "WR", "TE", "DST", "K"].includes(config.suggestionPosition)
     ? config.suggestionPosition
@@ -749,7 +754,7 @@
       : "Allow only one QB or TE through Round 8";
     earlyOneToggle.setAttribute("aria-pressed", String(Boolean(config.earlyQbTeOneTotalEnabled)));
     $(".got-strategy-row").classList.toggle("got-strategy-active", Boolean(config.earlyQbTeBlockEnabled || config.earlyQbTeOneTotalEnabled));
-    $("footer").textContent = `${String(dataset.meta.generatedAt || "Undated").slice(0, 10)} snapshot · full-PPR / 12 teams · league scoring requires matching projections`;
+    $("footer").textContent = `${String(dataset.meta.generatedAt || "Undated").slice(0, 10)} snapshot · full-PPR / 12 teams · ${dataset.meta.rankingsOnly ? "rankings only; custom bonuses not modeled" : "league scoring requires matching projections"}`;
     void maybeAutoDraft(espn, overallBest).catch(() => {
       schedulerError = "background trigger unavailable";
     });
@@ -782,7 +787,7 @@
     render();
   });
   modelSelect.addEventListener("change", () => {
-    const rankingModel = ["think-rmv", "sharp-value", "vegas-sharks-80", "vegas-only", "balanced-v04"].includes(modelSelect.value)
+    const rankingModel = ["fantasypros-ecr", "think-rmv", "sharp-value", "vegas-sharks-80", "vegas-only", "balanced-v04"].includes(modelSelect.value)
       ? modelSelect.value
       : "sharp-value";
     config = { ...config, rankingModel };

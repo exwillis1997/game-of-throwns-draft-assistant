@@ -562,6 +562,20 @@
     const round = roundForPick(currentPick, config.teams);
     const nextPick = nextPickAfter(currentPick, config.draftSlot, config.teams, config.rounds);
     const opponentPicks = opponentPicksUntilNext(currentPick, config.draftSlot, config.teams, config.rounds);
+    if (config.rankingModel === "fantasypros-ecr") {
+      return players.filter(player => Number.isFinite(player.fantasyProsRank))
+        .filter(player => !drafted.has(normalizeName(player.name)))
+        .filter(player => canDraftPosition(player.position, rosterCounts, config))
+        .filter(player => !isEarlyQbTeBlocked(player.position, round, config, rosterCounts))
+        .map(player => ({
+          ...player,
+          score: -player.fantasyProsRank + 100 * sharpRosterAdjustment(player, rosterCounts, round, config),
+          rankingModel: "fantasypros-ecr",
+          nextPick,
+          reason: `PPR consensus #${player.fantasyProsRank}${player.fantasyProsTier ? ", tier " + player.fantasyProsTier : ""}; adjusted for roster needs`,
+        }))
+        .sort((a,b) => b.score - a.score || a.fantasyProsRank - b.fantasyProsRank);
+    }
     const replacements = replacementPoints(players, config);
     const projectionPositionRanks = new Map();
     for (const position of ["QB", "RB", "WR", "TE"]) {
