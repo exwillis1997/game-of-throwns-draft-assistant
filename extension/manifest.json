@@ -2,14 +2,29 @@
   "manifest_version": 3,
   "name": "Game of Throwns Draft Assistant",
   "description": "Private ESPN draft recommendations using DraftSharks 3D values, FantasyPros ECR, Vegas projections, and platform ADP.",
-  "version": "0.8.0",
-  "permissions": ["storage", "alarms", "power"],
-  "host_permissions": ["https://fantasy.espn.com/*"],
+  "version": "0.9.0",
+  "permissions": [
+    "storage",
+    "alarms",
+    "power"
+  ],
+  "host_permissions": [
+    "https://fantasy.espn.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://fantasy.espn.com/football/draft*"],
-      "js": ["lib/engine.js", "lib/espn-detector.js", "content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://fantasy.espn.com/football/draft*"
+      ],
+      "js": [
+        "lib/engine.js",
+        "lib/scoring.js",
+        "lib/espn-detector.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -18,8 +33,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["data/rankings.json"],
-      "matches": ["https://fantasy.espn.com/*"]
+      "resources": [
+        "data/rankings.json"
+      ],
+      "matches": [
+        "https://fantasy.espn.com/*"
+      ]
     }
   ],
   "options_page": "options.html",

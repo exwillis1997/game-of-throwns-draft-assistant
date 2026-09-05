@@ -1,16 +1,12 @@
 (async function options() {
-  const defaults = globalThis.DraftAssistantEngine.DEFAULT_CONFIG;
+  const engine = globalThis.DraftAssistantEngine;
   const stored = await chrome.storage.local.get("draftAssistantConfig");
-  const config = {
-    ...defaults,
-    ...(stored.draftAssistantConfig || {}),
-    rosterMax: { ...defaults.rosterMax },
-  };
+  const config = engine.loadConfig(stored.draftAssistantConfig);
   const form = document.querySelector("form");
   form.elements.rankingModel.value = config.rankingModel;
   form.elements.draftSlot.value = config.draftSlot || "";
   form.elements.autoDraftMinSeconds.value = config.autoDraftMinSeconds || config.autoDraftSeconds || 5;
-  form.elements.autoDraftMaxSeconds.value = config.autoDraftMaxSeconds || 30;
+  form.elements.autoDraftMaxSeconds.value = config.autoDraftMaxSeconds || 25;
   form.elements.autoDraftEnabled.checked = Boolean(config.autoDraftEnabled);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -21,10 +17,10 @@
         : "sharp-value",
       draftSlot: Number(form.elements.draftSlot.value) || 0,
       autoDraftEnabled: form.elements.autoDraftEnabled.checked,
-      autoDraftMinSeconds: Math.min(55, Math.max(5, Number(form.elements.autoDraftMinSeconds.value) || 5)),
-      autoDraftMaxSeconds: Math.min(55, Math.max(Number(form.elements.autoDraftMinSeconds.value) || 5, Number(form.elements.autoDraftMaxSeconds.value) || 30)),
+      autoDraftMinSeconds: Math.min(25, Math.max(5, Number(form.elements.autoDraftMinSeconds.value) || 5)),
+      autoDraftMaxSeconds: Math.min(25, Math.max(Number(form.elements.autoDraftMinSeconds.value) || 5, Number(form.elements.autoDraftMaxSeconds.value) || 25)),
     };
-    await chrome.storage.local.set({ draftAssistantConfig: next });
+    await chrome.storage.local.set({ draftAssistantConfig: engine.loadConfig(next) });
     form.querySelector("output").textContent = "Saved locally.";
   });
 })();

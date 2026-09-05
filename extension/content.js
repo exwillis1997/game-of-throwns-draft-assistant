@@ -6,19 +6,26 @@
   const engine = globalThis.DraftAssistantEngine;
   const detector = globalThis.EspnDraftDetector;
   const dataUrl = chrome.runtime.getURL("data/rankings.json");
-  const response = await fetch(dataUrl);
-  if (!response.ok) return;
-  const dataset = await response.json();
+  let dataset;
+  try {
+    const response = await fetch(dataUrl);
+    if (!response.ok) throw new Error("Provide extension/data/rankings.json with your full-PPR rankings.");
+    dataset = await response.json();
+    const problem = engine.validateDataset(dataset);
+    if (problem) throw new Error(problem);
+    dataset = globalThis.DraftAssistantScoring.prepareDataset(dataset);
+  } catch (error) {
+    const notice = document.createElement("div");
+    notice.id = "got-draft-assistant-host";
+    notice.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;max-width:360px;padding:20px;background:#172033;color:white;border-radius:12px;font:14px/1.5 sans-serif";
+    notice.textContent = "Draft Assistant: rankings unavailable. " + error.message;
+    document.body.appendChild(notice);
+    return;
+  }
   const playersByName = new Map(dataset.players.map((player) => [engine.normalizeName(player.name), player]));
   const stored = await chrome.storage.local.get(["draftAssistantConfig", "manualDrafted"]);
-  let config = {
-    ...engine.DEFAULT_CONFIG,
-    ...(stored.draftAssistantConfig || {}),
-    rosterMax: { ...engine.DEFAULT_CONFIG.rosterMax },
-  };
-  if (config.earlyQbTeBlockEnabled) config.earlyQbTeOneTotalEnabled = false;
-  if (!Number.isFinite(config.autoDraftMinSeconds)) config.autoDraftMinSeconds = Math.min(55, Math.max(5, Number(config.autoDraftSeconds) || 5));
-  if (!Number.isFinite(config.autoDraftMaxSeconds)) config.autoDraftMaxSeconds = 30;
+  let config = engine.loadConfig(stored.draftAssistantConfig);
+  await chrome.storage.local.set({ draftAssistantConfig: config });
   let manualDrafted = stored.manualDrafted || [];
   const draftSessionId = new URL(window.location.href).searchParams.get("leagueId") || "draft";
   const userTeamId = new URL(window.location.href).searchParams.get("teamId") || "unknown";
@@ -92,7 +99,7 @@
         </div>
         <div class="got-auto-row">
           <button class="got-auto-toggle" type="button" aria-pressed="false">Arm auto-draft</button>
-          <label>draft with <input class="got-auto-min" type="number" min="5" max="55" step="1" aria-label="Minimum auto-draft seconds remaining">–<input class="got-auto-max" type="number" min="5" max="55" step="1" aria-label="Maximum auto-draft seconds remaining"> sec left</label>
+          <label>draft with <input class="got-auto-min" type="number" min="5" max="25" step="1" aria-label="Minimum auto-draft seconds remaining">–<input class="got-auto-max" type="number" min="5" max="25" step="1" aria-label="Maximum auto-draft seconds remaining"> sec left</label>
           <span class="got-clock">ESPN --:--</span>
         </div>
         <div class="got-best"></div>
@@ -126,8 +133,8 @@
   positionSelect.value = ["ALL", "QB", "RB", "WR", "TE", "DST", "K"].includes(config.suggestionPosition)
     ? config.suggestionPosition
     : "ALL";
-  autoDraftMinInput.value = Math.min(55, Math.max(5, Number(config.autoDraftMinSeconds) || 5));
-  autoDraftMaxInput.value = Math.min(55, Math.max(Number(autoDraftMinInput.value), Number(config.autoDraftMaxSeconds) || 30));
+  autoDraftMinInput.value = Math.min(25, Math.max(5, Number(config.autoDraftMinSeconds) || 5));
+  autoDraftMaxInput.value = Math.min(25, Math.max(Number(autoDraftMinInput.value), Number(config.autoDraftMaxSeconds) || 25));
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -196,8 +203,8 @@
   }
 
   function autoDraftBounds() {
-    const minimum = Math.min(55, Math.max(5, Number(config.autoDraftMinSeconds) || 5));
-    const maximum = Math.min(55, Math.max(minimum, Number(config.autoDraftMaxSeconds) || 30));
+    const minimum = Math.min(25, Math.max(5, Number(config.autoDraftMinSeconds) || 5));
+    const maximum = Math.min(25, Math.max(minimum, Number(config.autoDraftMaxSeconds) || 25));
     return { minimum, maximum };
   }
 
@@ -211,7 +218,7 @@
     if (!pickNumber) return null;
     const key = `got-auto-trigger:${draftSessionId}:${pickNumber}`;
     let trigger = Number(sessionStorage.getItem(key)) || null;
-    if (!trigger) {
+    if (!trigger || trigger < 5 || trigger > 25) {
       const { minimum, maximum } = autoDraftBounds();
       trigger = engine.chooseTriggerSeconds(minimum, maximum, randomUnit());
       sessionStorage.setItem(key, String(trigger));
@@ -742,7 +749,7 @@
       : "Allow only one QB or TE through Round 8";
     earlyOneToggle.setAttribute("aria-pressed", String(Boolean(config.earlyQbTeOneTotalEnabled)));
     $(".got-strategy-row").classList.toggle("got-strategy-active", Boolean(config.earlyQbTeBlockEnabled || config.earlyQbTeOneTotalEnabled));
-    $("footer").textContent = `${dataset.meta.generatedAt.slice(0, 10)} snapshot · local rankings`;
+    $("footer").textContent = `${String(dataset.meta.generatedAt || "Undated").slice(0, 10)} snapshot · full-PPR / 12 teams · league scoring requires matching projections`;
     void maybeAutoDraft(espn, overallBest).catch(() => {
       schedulerError = "background trigger unavailable";
     });
@@ -813,8 +820,8 @@
     render();
   });
   function saveAutoBounds() {
-    const minimum = Math.min(55, Math.max(5, Number(autoDraftMinInput.value) || 5));
-    const maximum = Math.min(55, Math.max(minimum, Number(autoDraftMaxInput.value) || 30));
+    const minimum = Math.min(25, Math.max(5, Number(autoDraftMinInput.value) || 5));
+    const maximum = Math.min(25, Math.max(minimum, Number(autoDraftMaxInput.value) || 25));
     autoDraftMinInput.value = minimum;
     autoDraftMaxInput.value = maximum;
     config = { ...config, autoDraftMinSeconds: minimum, autoDraftMaxSeconds: maximum };
