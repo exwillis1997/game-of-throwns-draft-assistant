@@ -29,6 +29,7 @@
   function loadConfig(stored = {}) {
     const current = stored.profileVersion === DEFAULT_CONFIG.profileVersion;
     const config = { ...DEFAULT_CONFIG, ...stored };
+    if (!Array.isArray(config.excludedPlayers)) config.excludedPlayers = ["Josh Jacobs"];
     for (const key of ["profileVersion", "scoring", "secondsPerPick", "teams", "rounds", "rosterSize", "benchSlots", "starterSlots", "rosterMax", "replacementRanks"]) {
       config[key] = typeof DEFAULT_CONFIG[key] === "object" ? { ...DEFAULT_CONFIG[key] } : DEFAULT_CONFIG[key];
     }
@@ -569,6 +570,7 @@
       rosterMax: { ...DEFAULT_CONFIG.rosterMax, ...(userConfig.rosterMax || {}) },
       starterSlots: { ...DEFAULT_CONFIG.starterSlots, ...(userConfig.starterSlots || {}) },
     };
+    players = players.filter(player => !isPlayerExcluded(player.name, config));
     const drafted = new Set((state.draftedNames || []).map(normalizeName));
     const roster = state.roster || [];
     const rosterCounts = countRoster(roster);
@@ -714,7 +716,7 @@
     if (config.rankingModel !== "think-rmv" || !pick ||
         overallPickFor(roundForPick(pick, config.teams), config.draftSlot, config.teams) !== pick ||
         nextPickAfter(pick, config.draftSlot, config.teams, config.rounds) !== pick + 1) return null;
-    const firstChoices = (rankings || rankPlayers(players, state, config)).slice(0, 8);
+    const firstChoices = (rankings || rankPlayers(players, state, config)).filter(player => !isPlayerExcluded(player.name, config)).slice(0, 8);
     let best = null;
     for (const first of firstChoices) {
       const secondState = {...state, currentPick:pick + 1,
@@ -729,7 +731,12 @@
     return best;
   }
 
+  function isPlayerExcluded(name, config = {}) {
+    return (Array.isArray(config.excludedPlayers) ? config.excludedPlayers : ["Josh Jacobs"]).some(excluded => normalizeName(excluded) === normalizeName(name));
+  }
+
   root.DraftAssistantEngine = {
+    isPlayerExcluded,
     planTurn,
     DEFAULT_CONFIG,
     loadConfig,

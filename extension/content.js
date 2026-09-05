@@ -109,6 +109,16 @@
           <span class="got-clock">ESPN --:--</span>
         </div>
         <div class="got-best"></div>
+        <details class="got-availability">
+          <summary>Availability / Do not draft</summary>
+          <p>Local review list, not a live injury feed. Unlisted players have not been cleared.</p>
+          <div class="got-exclusions"></div>
+          <label>Exclude player <input class="got-exclude-name" placeholder="Full player name" list="got-player-names"></label>
+          <datalist id="got-player-names"></datalist>
+          <button class="got-exclude-add" type="button">Exclude</button>
+          <p class="got-exclude-message" role="status"></p>
+          <p>Josh Jacobs: Commissioner’s Exempt List; return uncertain. Source published Sep 1; checked Sep 5, 2026. <a href="https://www.packers.com/news/5-things-learned-from-gm-brian-gutekunst-about-packers-roster-sep-1-2026" target="_blank" rel="noopener noreferrer">Packers report</a>. Removing his exclusion allows auto-draft to select him again.</p>
+        </details>
         <div class="got-turn-plan"></div>
         <div class="got-draft-action"></div>
         <ol class="got-alternatives"></ol>
@@ -516,6 +526,8 @@
             || liveEspn.secondsRemaining > triggerSeconds)
       );
       if (
+        engine.isPlayerExcluded(target.name, config)
+        ||
         !liveEspn.isUserOnClock
         || liveEspn.currentPick !== initialPick
         || liveStable.fingerprint !== intent.stateHash
@@ -694,6 +706,7 @@
     const draftedNames = [...new Set([...espn.draftedNames, ...manualDrafted])];
     lastState = { ...espn, draftedNames };
     const allRankings = engine.rankPlayers(dataset.players, lastState, config);
+    $(".got-availability summary").textContent = `Availability / Do not draft (${config.excludedPlayers.length})`;
     const turnPlan = engine.planTurn(dataset.players, lastState, config, allRankings);
     if (turnPlan) {
       const index = allRankings.findIndex(player => player.name === turnPlan.first.name);
@@ -859,6 +872,39 @@
     await chrome.storage.local.set({ manualDrafted });
     render();
   });
+  function renderExclusions() {
+    const container = $(".got-exclusions");
+    container.replaceChildren();
+    for (const name of config.excludedPlayers) {
+      const row = document.createElement("p");
+      row.append(document.createTextNode(`${name} — blocked `));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove exclusion";
+      remove.addEventListener("click", () => {
+        config.excludedPlayers = config.excludedPlayers.filter(item => engine.normalizeName(item) !== engine.normalizeName(name));
+        void saveConfig();
+        clearAutoTriggerForPick(lastState?.currentPick);
+        renderExclusions(); render();
+      });
+      row.append(remove); container.append(row);
+    }
+  }
+  for (const player of dataset.players) {
+    const option = document.createElement("option"); option.value = player.name;
+    $("#got-player-names").append(option);
+  }
+  $(".got-exclude-add").addEventListener("click", () => {
+    const input = $(".got-exclude-name");
+    const player = playersByName.get(engine.normalizeName(input.value));
+    if (!player) { $(".got-exclude-message").textContent = "Choose a full player name from the rankings."; return; }
+    if (!engine.isPlayerExcluded(player.name, config)) config.excludedPlayers.push(player.name);
+    $(".got-exclude-message").textContent = `${player.name} excluded from recommendations and auto-draft.`;
+    input.value = "";
+    void saveConfig(); clearAutoTriggerForPick(lastState?.currentPick);
+    renderExclusions(); render();
+  });
+  renderExclusions();
   $(".got-undo").addEventListener("click", async () => {
     manualDrafted = manualDrafted.slice(0, -1);
     await chrome.storage.local.set({ manualDrafted });

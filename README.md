@@ -123,3 +123,9 @@ The importer validates position-specific column layouts (including repeated YDS/
 **Projection value + turn planning** uses FantasyPros raw stats recalculated with the league's base PPR weights, flex-aware marginal starter value, restrained bench value and ESPN ADP timing. ADP categories are heuristics, not calibrated probabilities. At consecutive picks it compares eight legal first choices with reevaluated second choices; this bounded search does not guarantee a globally optimal draft. Both mock QB/TE restrictions are optional and should normally remain off.
 
 The first load of the enriched data selects this model and disarms auto-draft. Rankings-only remains selectable. Models requiring Vegas or DraftSharks data stay disabled for this dataset. Long-TD, return and two-point projection categories are unavailable; no bonus estimates are invented. DST/K use positional ECR in the late rounds. Injury updates, weekly matchup projections and draft-grade prediction are not included. A live practice draft remains necessary after reloading the extension.
+
+## Availability exclusions
+
+Open **Availability / Do not draft** in the overlay to exclude a player by full name or remove an exclusion. Exclusions persist in Chrome settings and apply to every model, both turn-plan picks, and the final pre-submit check. They never count as drafted players. Removing a player allows the assistant to draft him again.
+
+Josh Jacobs is initially excluded with a linked Packers report (published September 1, reviewed September 5, 2026) describing exempt-list status and an uncertain return. This is a local reviewed status, not a live injury feed or a complete availability audit. Unlisted players are not certified healthy. Refresh the review before the real draft. Projection formulas are unchanged.
