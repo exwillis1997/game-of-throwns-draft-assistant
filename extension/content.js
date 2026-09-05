@@ -26,6 +26,10 @@
   const stored = await chrome.storage.local.get(["draftAssistantConfig", "manualDrafted"]);
   let config = engine.loadConfig(stored.draftAssistantConfig);
   if (dataset.meta.rankingsOnly) config.rankingModel = "fantasypros-ecr";
+  if (dataset.meta.projectionImportVersion && config.projectionImportVersion !== dataset.meta.projectionImportVersion) {
+    config = {...config, rankingModel:"think-rmv", projectionImportVersion:dataset.meta.projectionImportVersion, autoDraftEnabled:false};
+  }
+  if (dataset.meta.supportedModels && !dataset.meta.supportedModels.includes(config.rankingModel)) config.rankingModel = dataset.meta.supportedModels[0];
   await chrome.storage.local.set({ draftAssistantConfig: config });
   let manualDrafted = stored.manualDrafted || [];
   const draftSessionId = new URL(window.location.href).searchParams.get("leagueId") || "draft";
@@ -75,7 +79,7 @@
           <label>Ranking model
             <select class="got-model" aria-label="Ranking model">
               <option value="fantasypros-ecr">FantasyPros PPR · rankings only</option>
-              <option value="think-rmv">Think · Pro RMV experimental</option>
+              <option value="think-rmv">Projection value + turn planning</option>
               <option value="sharp-value">Sharp value · new</option>
               <option value="vegas-sharks-80">Vegas 80 / DraftSharks 20 · RB/WR priority</option>
               <option value="vegas-only">Vegas only · positional value</option>
@@ -134,6 +138,9 @@
   if (dataset.meta.rankingsOnly) {
     for (const option of modelSelect.options) option.disabled = option.value !== "fantasypros-ecr";
   }
+  if (dataset.meta.supportedModels) {
+    for (const option of modelSelect.options) option.disabled = !dataset.meta.supportedModels.includes(option.value);
+  }
   modelSelect.value = config.rankingModel;
   positionSelect.value = ["ALL", "QB", "RB", "WR", "TE", "DST", "K"].includes(config.suggestionPosition)
     ? config.suggestionPosition
@@ -152,13 +159,13 @@
   }
 
   function playerCard(player) {
-    const vegas = Number.isFinite(player.vegasPoints) ? `${Math.round(player.vegasPoints)} Vegas pts` : "No Vegas projection";
+    const vegas = Number.isFinite(player.fantasyProsProjection) ? `${Math.round(player.fantasyProsProjection)} FP base PPR pts` : Number.isFinite(player.vegasPoints) ? `${Math.round(player.vegasPoints)} Vegas pts` : "No projection";
     const ecr = Number.isFinite(player.fantasyProsRank) ? `ECR ${player.fantasyProsRank}` : "No ECR";
     const draftSharks = Number.isFinite(player.draftSharks3dValue) ? `DS 3D ${Math.round(player.draftSharks3dValue)}` : "No DS 3D value";
     const timingAdp = Number.isFinite(player.espnAdp) ? player.espnAdp : player.sleeperAdp;
     const adp = Number.isFinite(timingAdp) ? `${Number.isFinite(player.espnAdp) ? "ESPN" : "Sleeper"} ADP ${timingAdp}` : "No ADP";
     const metrics = player.rankingModel === "think-rmv"
-      ? `<span>RMV ${Number(player.rosterMarginalValue || 0).toFixed(1)}</span><span>Proj ${Number(player.adjustedProjection || 0).toFixed(1)}</span><span>${adp}</span><span>${escapeHtml(player.survivalCategory || "unknown")}</span>`
+      ? `<span>Lineup gain ${Number(player.rosterMarginalValue || 0).toFixed(1)}</span><span>${Number.isFinite(player.projectionMean) ? `${Number.isFinite(player.fantasyProsProjection) ? "FP base PPR" : "Projection"} ${player.projectionMean.toFixed(1)}` : ecr}</span><span>${adp}</span><span>${escapeHtml(player.survivalCategory || "unknown")}</span>`
       : player.rankingModel === "vegas-only"
         ? `<span>${vegas}</span><span>${Number.isFinite(player.vorp) ? `${Math.round(player.vorp)} VORP` : "No VORP"}</span>`
       : player.rankingModel === "sharp-value" || player.rankingModel === "vegas-sharks-80"
@@ -687,6 +694,11 @@
     const draftedNames = [...new Set([...espn.draftedNames, ...manualDrafted])];
     lastState = { ...espn, draftedNames };
     const allRankings = engine.rankPlayers(dataset.players, lastState, config);
+    const turnPlan = engine.planTurn(dataset.players, lastState, config, allRankings);
+    if (turnPlan) {
+      const index = allRankings.findIndex(player => player.name === turnPlan.first.name);
+      if (index > 0) allRankings.unshift(...allRankings.splice(index, 1));
+    }
     const overallBest = allRankings[0];
     const suggestionPosition = positionSelect.value || "ALL";
     const rankings = (suggestionPosition === "ALL"
@@ -699,7 +711,9 @@
       ? `<div class="got-label">${suggestionPosition === "ALL" ? "BEST PICK" : `BEST ${escapeHtml(suggestionPosition)}`}</div>${playerCard(rankings[0])}`
       : `<p class="got-empty">No available ${suggestionPosition === "ALL" ? "players" : escapeHtml(suggestionPosition + "s")} are roster-eligible.</p>`;
     const nextPick = engine.nextPickAfter(espn.currentPick || 1, config.draftSlot, config.teams, config.rounds);
-    if (suggestionPosition === "ALL" && rankings[0] && nextPick === espn.currentPick + 1) {
+    if (suggestionPosition === "ALL" && turnPlan) {
+      $(".got-turn-plan").innerHTML = `<strong>TURN PLAN</strong><span>1. ${escapeHtml(turnPlan.first.name)} → 2. ${escapeHtml(turnPlan.second.name)}</span>`;
+    } else if (suggestionPosition === "ALL" && rankings[0] && espn.isUserOnClock && nextPick === espn.currentPick + 1) {
       const secondState = {
         ...lastState,
         currentPick: nextPick,
@@ -754,7 +768,7 @@
       : "Allow only one QB or TE through Round 8";
     earlyOneToggle.setAttribute("aria-pressed", String(Boolean(config.earlyQbTeOneTotalEnabled)));
     $(".got-strategy-row").classList.toggle("got-strategy-active", Boolean(config.earlyQbTeBlockEnabled || config.earlyQbTeOneTotalEnabled));
-    $("footer").textContent = `${String(dataset.meta.generatedAt || "Undated").slice(0, 10)} snapshot · full-PPR / 12 teams · ${dataset.meta.rankingsOnly ? "rankings only; custom bonuses not modeled" : "league scoring requires matching projections"}`;
+    $("footer").textContent = `${String(dataset.meta.enrichedAt || dataset.meta.generatedAt || "Undated").slice(0, 10)} snapshot · full-PPR / 12 teams · ${dataset.meta.rankingsOnly ? "rankings only; custom bonuses not modeled" : dataset.meta.projectionImportVersion ? "FP base projections + ESPN ADP; long-TD/return/2pt bonuses missing; DST/K use ranks" : "league scoring requires matching projections"}`;
     void maybeAutoDraft(espn, overallBest).catch(() => {
       schedulerError = "background trigger unavailable";
     });

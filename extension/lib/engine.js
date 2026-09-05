@@ -320,6 +320,7 @@
   }
 
   function thinkProjection(player) {
+    if (Number.isFinite(player.fantasyProsProjection)) return player.fantasyProsProjection;
     const vegas = Number.isFinite(player.vegasPoints) ? player.vegasPoints : null;
     const consensus = Number.isFinite(player.draftSharksConsensusProjection)
       ? player.draftSharksConsensusProjection
@@ -546,6 +547,7 @@
       if (!["QB", "RB", "WR", "TE"].includes(positionKey(candidate.position)) || !Number.isFinite(candidate.utility)) continue;
       const fallback = candidates
         .filter((other) => other !== candidate && Number.isFinite(other.utility))
+        .filter((other) => positionKey(other.position) === positionKey(candidate.position))
         .filter((other) => !Number.isFinite(other.espnAdp) || other.espnAdp > nextPick - 2)
         .reduce((best, other) => Math.max(best, other.utility), 0);
       const factor = candidate.survivalCategory === "likely gone" ? 0.75
@@ -704,7 +706,31 @@
         : (a.fantasyProsRank ?? 999) - (b.fantasyProsRank ?? 999)));
   }
 
+  // Compare eight legal first choices with a freshly evaluated second choice.
+  // This is a bounded heuristic, not a full-draft optimizer.
+  function planTurn(players, state, userConfig, rankings) {
+    const config = {...DEFAULT_CONFIG, ...userConfig};
+    const pick = state.currentPick;
+    if (config.rankingModel !== "think-rmv" || !pick ||
+        overallPickFor(roundForPick(pick, config.teams), config.draftSlot, config.teams) !== pick ||
+        nextPickAfter(pick, config.draftSlot, config.teams, config.rounds) !== pick + 1) return null;
+    const firstChoices = (rankings || rankPlayers(players, state, config)).slice(0, 8);
+    let best = null;
+    for (const first of firstChoices) {
+      const secondState = {...state, currentPick:pick + 1,
+        draftedNames:[...(state.draftedNames || []), first.name],
+        roster:[...(state.roster || []), {name:first.name, position:first.position}]};
+      const second = rankPlayers(players, secondState, config)[0];
+      if (!second) continue;
+      // Exclude ADP urgency: no opponent can take either player between these picks.
+      const value = (first.utility ?? first.score) + (second.utility ?? second.score);
+      if (!best || value > best.value) best = {first, second, value};
+    }
+    return best;
+  }
+
   root.DraftAssistantEngine = {
+    planTurn,
     DEFAULT_CONFIG,
     loadConfig,
     validateDataset,

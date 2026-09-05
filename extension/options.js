@@ -10,6 +10,10 @@
       config.rankingModel = "fantasypros-ecr";
       for (const option of form.elements.rankingModel.options) option.disabled = option.value !== "fantasypros-ecr";
     }
+    if (dataset.meta?.supportedModels) {
+      if (!dataset.meta.supportedModels.includes(config.rankingModel)) config.rankingModel = dataset.meta.supportedModels[0];
+      for (const option of form.elements.rankingModel.options) option.disabled = !dataset.meta.supportedModels.includes(option.value);
+    }
   } catch { /* Settings remain available before a rankings file is installed. */ }
   form.elements.rankingModel.value = config.rankingModel;
   form.elements.draftSlot.value = config.draftSlot || "";

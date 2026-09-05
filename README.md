@@ -29,7 +29,7 @@ Rankings must declare `meta.scoring: "ppr"` and `meta.leagueTeams: 12`. Missing,
 
 ## Ranking models
 
-The overlay and settings page expose five interchangeable models:
+The overlay and settings page support six models; the installed dataset enables only models with the required inputs:
 
 - **Think · Pro RMV experimental** implements the Extended Pro architecture with the data available locally. It builds a cardinal projection from 65% Vegas and 35% DraftSharks consensus projection, moves at most eight points toward positional FantasyPros ECR, calculates dynamic joint RB/WR/TE/FLEX replacement frontiers, and ranks candidates by the improvement to a completed legal lineup. ESPN ADP affects only categorical wait-versus-draft-now timing. Bench ceiling is separate and capped at ten points. Bench-only selections are blocked until all seven offensive starter assignments are filled; early QB2/TE2 picks are suppressed, and overstocked RB or WR benches receive a strong balance discount. This is an inspectable MVP: FantasyPros raw-stat projections, calibrated ESPN pick distributions, weekly injury availability, and matchup-based K/DST projections are not yet available.
 - **Sharp value · new** uses 55% DraftSharks 3D value, 35% FantasyPros full-PPR ECR, and 10% Vegas value over replacement. DraftSharks ceiling and injury data make small adjustments. ESPN ADP controls timing and reach decisions, and a soft RB/WR balance penalty prevents extreme benches.
@@ -109,3 +109,17 @@ A FantasyPros PPR export with ranks but no projections uses **FantasyPros PPR ·
 
 Rankings-only mode fills offensive starter assignments before adding offensive bench depth. This is a roster-construction heuristic, not a projection model or a guarantee of draft grades. Defense names such as Texans D/ST and Houston Texans share one identity for drafted-player filtering.
 
+
+## FantasyPros projections and ESPN ADP
+
+Download FantasyPros season projections for QB, RB, WR and TE, plus the PPR ADP CSV. Preserve the downloaded filenames, then run:
+
+```powershell
+node scripts/import-fantasypros.mjs extension/data/rankings.json C:/path/to/downloads
+```
+
+The importer validates position-specific column layouts (including repeated YDS/TDS headers), joins names with position and team, reports unmatched rows, and reads only the ESPN ADP column. It replaces previous imported values so missing new data cannot retain stale projections. The private generated dataset stays ignored by Git.
+
+**Projection value + turn planning** uses FantasyPros raw stats recalculated with the league's base PPR weights, flex-aware marginal starter value, restrained bench value and ESPN ADP timing. ADP categories are heuristics, not calibrated probabilities. At consecutive picks it compares eight legal first choices with reevaluated second choices; this bounded search does not guarantee a globally optimal draft. Both mock QB/TE restrictions are optional and should normally remain off.
+
+The first load of the enriched data selects this model and disarms auto-draft. Rankings-only remains selectable. Models requiring Vegas or DraftSharks data stay disabled for this dataset. Long-TD, return and two-point projection categories are unavailable; no bonus estimates are invented. DST/K use positional ECR in the late rounds. Injury updates, weekly matchup projections and draft-grade prediction are not included. A live practice draft remains necessary after reloading the extension.

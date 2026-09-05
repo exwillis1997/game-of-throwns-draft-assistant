@@ -26,7 +26,7 @@
     let total = 0;
     for (const [category, count] of Object.entries(stats)) {
       if (!Object.hasOwn(weights, category)) throw new Error(`Unsupported scoring category: ${category}`);
-      if (!Number.isFinite(count) || count < 0) throw new Error(`Invalid projected count: ${category}`);
+      if (!Number.isFinite(count) || (count < 0 && !["PY", "RY", "REY"].includes(category))) throw new Error(`Invalid projected count: ${category}`);
       total += weights[category] * count;
     }
     return total;
@@ -38,7 +38,7 @@
       const prepared = { ...player };
       // Keep each source independent; never add bonuses again to a scored total.
       for (const [source, stats] of Object.entries(player.statProjections)) {
-        if (!["vegasPoints", "draftSharksProjection", "draftSharksConsensusProjection"].includes(source)) throw new Error(`Unsupported projection source: ${source}`);
+        if (!["fantasyProsProjection", "vegasPoints", "draftSharksProjection", "draftSharksConsensusProjection"].includes(source)) throw new Error(`Unsupported projection source: ${source}`);
         prepared[source] = scoreStats(stats, player.position);
       }
       return prepared;
