@@ -4,6 +4,16 @@ import "../extension/lib/scoring.js";
 import "../extension/lib/engine.js";
 const scoring = globalThis.DraftAssistantScoring;
 
+test("September 7 rushing bonuses score explicit counters without inferring long TDs", () => {
+  assert.equal(scoring.scoreStats({RTD40:1}, "RB"), 2);
+  assert.equal(scoring.scoreStats({RTD50:1}, "QB"), 3);
+  assert.equal(scoring.scoreStats({RY:1000,RTD:10}, "RB"), 160);
+  const dataset = {players:[{position:"RB",statProjections:{fantasyProsProjection:{RY:1000,RTD:10,RTD40:2,RTD50:1}}}]};
+  const prepared = scoring.prepareDataset(dataset);
+  assert.equal(prepared.players[0].fantasyProsProjection, 167);
+  assert.equal(scoring.prepareDataset(prepared).players[0].fantasyProsProjection, 167);
+});
+
 test("scores full PPR and the exact passing/receiving bonus counters", () => {
   assert.equal(scoring.scoreStats({ REC: 80, REY: 1000, RETD: 8, RETD40: 2, RETD50: 1 }, "WR"), 235);
   assert.equal(scoring.scoreStats({ PY: 300, PTD: 3, PTD40: 1, PTD50: 1, INT: 2, "2PC": 1, RY: 20, RTD: 1, FUML: 1 }, "QB"), 33);

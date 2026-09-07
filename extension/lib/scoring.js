@@ -1,13 +1,13 @@
 (function attachLeagueScoring(root) {
   "use strict";
 
-  // ESPN scoring categories verified against the league settings on 2026-09-05.
+  // ESPN scoring categories verified against the league screenshots on 2026-09-07.
   // Inputs are projected category counts, not touchdown lengths or season yardage
   // to be bucketed. Overlapping categories must follow the provider's ESPN counts.
   const miscellaneous = { KRTD: 6, PRTD: 6, FTD: 6, FUML: -2, INTTD: 6, FRTD: 6, BLKKRTD: 6, "2PTRET": 2, "1PSF": 1 };
   const offense = {
     PY: 0.04, PTD: 4, PTD40: 2, PTD50: 3, INT: -2, "2PC": 2,
-    RY: 0.1, RTD: 6, "2PR": 2,
+    RY: 0.1, RTD: 6, RTD40: 2, RTD50: 3, "2PR": 2,
     REY: 0.1, REC: 1, RETD: 6, RETD40: 2, RETD50: 3, "2PRE": 2,
     ...miscellaneous,
   };

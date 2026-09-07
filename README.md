@@ -129,3 +129,7 @@ The first load of the enriched data selects this model and disarms auto-draft. R
 Open **Availability / Do not draft** in the overlay to exclude a player by full name or remove an exclusion. Exclusions persist in Chrome settings and apply to every model, both turn-plan picks, and the final pre-submit check. They never count as drafted players. Removing a player allows the assistant to draft him again.
 
 Josh Jacobs is initially excluded with a linked Packers report (published September 1, reviewed September 5, 2026) describing exempt-list status and an uncertain return. This is a local reviewed status, not a live injury feed or a complete availability audit. Unlisted players are not certified healthy. Refresh the review before the real draft. Projection formulas are unchanged.
+
+### September 7 scoring update
+
+League screenshots confirm rushing touchdown bonus counters `RTD40: 2` and `RTD50: 3`. These are now supported alongside passing and receiving bonuses. Inputs must provide ESPN-compatible category counts; the scorer does not infer threshold overlap from touchdown lengths. Current FantasyPros projections omit these counters, so their base PPR totals remain unchanged.
