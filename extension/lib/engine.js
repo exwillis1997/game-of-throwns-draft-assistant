@@ -2,11 +2,14 @@
   "use strict";
 
   const DEFAULT_CONFIG = Object.freeze({
-    teams: 10,
-    rounds: 17,
-    rosterSize: 17,
-    benchSlots: 7,
-    draftSlot: 0,
+    profileVersion: 1,
+    scoring: "ppr",
+    secondsPerPick: 30,
+    teams: 12,
+    rounds: 13,
+    rosterSize: 13,
+    benchSlots: 4,
+    draftSlot: 1,
     rankingModel: "sharp-value",
     suggestionPosition: "ALL",
     rbPreference: 1,
@@ -16,11 +19,50 @@
     vegasWeight: 0.45,
     autoDraftEnabled: false,
     autoDraftMinSeconds: 5,
-    autoDraftMaxSeconds: 30,
-    replacementRanks: { QB: 11, RB: 32, WR: 34, TE: 11 },
-    rosterMax: { QB: 2, RB: 8, WR: 8, TE: 3, DST: 3, K: 3 },
-    starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, RB_WR: 1, FLEX: 1, DST: 1, K: 1 },
+    autoDraftMaxSeconds: 25,
+    replacementRanks: { QB: 13, RB: 31, WR: 31, TE: 13 },
+    rosterMax: { QB: 4, RB: 8, WR: 8, TE: 3, DST: 3, K: 3 },
+    starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1 },
   });
+
+  // Apply this fork's league rules even when storage contains the upstream preset.
+  function loadConfig(stored = {}) {
+    const current = stored.profileVersion === DEFAULT_CONFIG.profileVersion;
+    const config = { ...DEFAULT_CONFIG, ...stored };
+    if (!Array.isArray(config.excludedPlayers)) config.excludedPlayers = ["Josh Jacobs"];
+    for (const key of ["profileVersion", "scoring", "secondsPerPick", "teams", "rounds", "rosterSize", "benchSlots", "starterSlots", "rosterMax", "replacementRanks"]) {
+      config[key] = typeof DEFAULT_CONFIG[key] === "object" ? { ...DEFAULT_CONFIG[key] } : DEFAULT_CONFIG[key];
+    }
+    if (!current) {
+      config.draftSlot = DEFAULT_CONFIG.draftSlot;
+      config.autoDraftEnabled = false;
+    }
+    if (!Number.isInteger(config.draftSlot) || config.draftSlot < 1 || config.draftSlot > config.teams) config.draftSlot = DEFAULT_CONFIG.draftSlot;
+    config.autoDraftMinSeconds = Math.min(25, Math.max(5, Math.round(Number(config.autoDraftMinSeconds) || 5)));
+    config.autoDraftMaxSeconds = Math.min(25, Math.max(config.autoDraftMinSeconds, Math.round(Number(config.autoDraftMaxSeconds) || 25)));
+    if (config.earlyQbTeBlockEnabled) config.earlyQbTeOneTotalEnabled = false;
+    return config;
+  }
+
+  function validateDataset(dataset) {
+    if (!Array.isArray(dataset?.players) || !dataset.players.length) return "Rankings must contain a nonempty players array.";
+    if (dataset.meta?.example) return "The example rankings are synthetic. Supply a real full-PPR rankings file.";
+    if (dataset.meta?.scoring !== "ppr") return "Rankings must be full-PPR (meta.scoring: ppr). Half-PPR totals and ranks cannot be relabeled or converted without source data.";
+    if (dataset.meta?.leagueTeams !== 12) return "Rankings must be prepared for 12 teams (meta.leagueTeams: 12).";
+    if (dataset.players.some(player => !player || typeof player.name !== "string" || !player.name.trim() || !Object.hasOwn(DEFAULT_CONFIG.rosterMax, positionKey(player.position)))) return "Each player needs a name and a supported position.";
+    return null;
+  }
+
+  // ESPN uses mascot + D/ST while rankings use full franchise names.
+  const DEFENSE_NAMES = ["Houston Texans","Denver Broncos","Los Angeles Rams","Seattle Seahawks","Philadelphia Eagles","Pittsburgh Steelers","Minnesota Vikings","New England Patriots","Jacksonville Jaguars","Los Angeles Chargers","Baltimore Ravens","Kansas City Chiefs","Green Bay Packers","Detroit Lions","Buffalo Bills","Cleveland Browns","San Francisco 49ers","New Orleans Saints","Atlanta Falcons","Indianapolis Colts","Chicago Bears","Dallas Cowboys","New York Giants","Carolina Panthers","Tampa Bay Buccaneers","Tennessee Titans","Cincinnati Bengals","Las Vegas Raiders","Washington Commanders","Miami Dolphins","New York Jets","Arizona Cardinals"];
+  const DEFENSE_ALIASES = new Map();
+  for (const name of DEFENSE_NAMES) {
+    const canonical = name.toLowerCase();
+    const mascot = canonical.split(" ").at(-1);
+    for (const base of [canonical, mascot]) {
+      for (const suffix of ["", " d st", " dst", " defense", " def"]) DEFENSE_ALIASES.set(base + suffix, canonical);
+    }
+  }
 
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
 
@@ -44,6 +86,7 @@
       } else collapsed.push(parts[index]);
     }
     const normalized = collapsed.join(" ");
+    if (DEFENSE_ALIASES.has(normalized)) return DEFENSE_ALIASES.get(normalized);
     return ({
       "cameron skattebo": "cam skattebo",
       "cameron ward": "cam ward",
@@ -95,7 +138,7 @@
     return (round - 1) * teams + (round % 2 === 1 ? slot : teams - slot + 1);
   }
 
-  function nextPickAfter(currentPick, slot, teams = 10, rounds = 17) {
+  function nextPickAfter(currentPick, slot, teams = DEFAULT_CONFIG.teams, rounds = DEFAULT_CONFIG.rounds) {
     if (!slot) return currentPick + teams;
     for (let round = 1; round <= rounds; round += 1) {
       const pick = overallPickFor(round, slot, teams);
@@ -104,11 +147,11 @@
     return teams * rounds;
   }
 
-  function opponentPicksUntilNext(currentPick, slot, teams = 10, rounds = 17) {
+  function opponentPicksUntilNext(currentPick, slot, teams = DEFAULT_CONFIG.teams, rounds = DEFAULT_CONFIG.rounds) {
     return Math.max(0, nextPickAfter(currentPick, slot, teams, rounds) - currentPick - 1);
   }
 
-  function ownPicksBefore(currentPick, slot, teams = 10, rounds = 17) {
+  function ownPicksBefore(currentPick, slot, teams = DEFAULT_CONFIG.teams, rounds = DEFAULT_CONFIG.rounds) {
     if (!slot) return null;
     let count = 0;
     for (let round = 1; round <= rounds; round += 1) {
@@ -118,8 +161,8 @@
   }
 
   function chooseTriggerSeconds(minimum, maximum, randomUnit = Math.random()) {
-    const min = Math.min(55, Math.max(5, Math.round(Number(minimum) || 5)));
-    const max = Math.min(55, Math.max(min, Math.round(Number(maximum) || 30)));
+    const min = Math.min(25, Math.max(5, Math.round(Number(minimum) || 5)));
+    const max = Math.min(25, Math.max(min, Math.round(Number(maximum) || 25)));
     const unit = Math.min(0.999999999, Math.max(0, Number(randomUnit) || 0));
     return min + Math.floor(unit * (max - min + 1));
   }
@@ -265,7 +308,10 @@
     return "required roster position; no Vegas projection is available";
   }
 
-  const OFFENSIVE_SLOTS = ["QB", "RB", "RB", "RB_WR", "WR", "WR", "TE", "FLEX"];
+  function offensiveSlots(config) {
+    return Object.entries(config.starterSlots).filter(([slot]) => slot !== "DST" && slot !== "K")
+      .flatMap(([slot, count]) => Array(count).fill(slot));
+  }
 
   function eligibleForSlot(positionValue, slot) {
     const position = positionKey(positionValue);
@@ -275,6 +321,7 @@
   }
 
   function thinkProjection(player) {
+    if (Number.isFinite(player.fantasyProsProjection)) return player.fantasyProsProjection;
     const vegas = Number.isFinite(player.vegasPoints) ? player.vegasPoints : null;
     const consensus = Number.isFinite(player.draftSharksConsensusProjection)
       ? player.draftSharksConsensusProjection
@@ -360,13 +407,13 @@
     return frontiers;
   }
 
-  function optimizedOffensiveLineupValue(entries) {
+  function optimizedOffensiveLineupValue(entries, offensiveSlots) {
     let states = new Map([[0, 0]]);
     for (const entry of entries) {
       if (!Number.isFinite(entry.value)) continue;
       const next = new Map(states);
       for (const [mask, total] of states) {
-        for (let index = 0; index < OFFENSIVE_SLOTS.length; index += 1) {
+        for (let index = 0; index < offensiveSlots.length; index += 1) {
           if (mask & (1 << index)) continue;
           if (!entry.slots.includes(index)) continue;
           const nextMask = mask | (1 << index);
@@ -376,18 +423,18 @@
       }
       states = next;
     }
-    return states.get((1 << OFFENSIVE_SLOTS.length) - 1) ?? -Infinity;
+    return states.get((1 << offensiveSlots.length) - 1) ?? -Infinity;
   }
 
-  function lineupEntries(roster, playersByName, projectionMap, frontiers) {
+  function lineupEntries(roster, playersByName, projectionMap, frontiers, offensiveSlots) {
     const entries = roster.map((rosterPlayer) => {
       const player = playersByName.get(normalizeName(rosterPlayer.name));
       const value = projectionMap.get(normalizeName(rosterPlayer.name))?.value;
       return player && Number.isFinite(value)
-        ? { value, slots: OFFENSIVE_SLOTS.map((slot, index) => eligibleForSlot(player.position, slot) ? index : -1).filter((index) => index >= 0) }
+        ? { value, slots: offensiveSlots.map((slot, index) => eligibleForSlot(player.position, slot) ? index : -1).filter((index) => index >= 0) }
         : null;
     }).filter(Boolean);
-    OFFENSIVE_SLOTS.forEach((slot, index) => {
+    offensiveSlots.forEach((slot, index) => {
       entries.push({ value: frontiers[slot] ?? 0, slots: [index] });
     });
     return entries;
@@ -413,6 +460,7 @@
   }
 
   function rankThinkPlayers(players, state, config, drafted, roster, rosterCounts, currentPick, round, nextPick, opponentPicks) {
+    const slotsForLeague = offensiveSlots(config);
     const projectionMap = thinkProjectionMap(players);
     const playersByName = new Map(players.map((player) => [normalizeName(player.name), player]));
     const frontiers = dynamicFrontiers(players, drafted, projectionMap, config);
@@ -426,14 +474,14 @@
       const expectedRostered = position === "RB" || position === "WR" ? config.teams * 6 : Math.ceil(config.teams * 1.5);
       waiverBaselines[position] = values[Math.min(values.length - 1, expectedRostered - 1)] ?? 0;
     }
-    const baselineEntries = lineupEntries(roster, playersByName, projectionMap, frontiers);
-    const baselineValue = optimizedOffensiveLineupValue(baselineEntries);
+    const baselineEntries = lineupEntries(roster, playersByName, projectionMap, frontiers, slotsForLeague);
+    const baselineValue = optimizedOffensiveLineupValue(baselineEntries, slotsForLeague);
     const rosterByPosition = countRoster(roster);
     const currentStarterAssignments = maxStarterAssignments(rosterByPosition, config);
     const specialStarterAssignments = Math.min(rosterByPosition.DST || 0, config.starterSlots.DST || 0)
       + Math.min(rosterByPosition.K || 0, config.starterSlots.K || 0);
     const offensiveStarterAssignments = currentStarterAssignments - specialStarterAssignments;
-    const offensiveLineupComplete = offensiveStarterAssignments >= OFFENSIVE_SLOTS.length;
+    const offensiveLineupComplete = offensiveStarterAssignments >= slotsForLeague.length;
     const candidates = players
       .filter((player) => !drafted.has(normalizeName(player.name)))
       .filter((player) => canDraftPosition(player.position, rosterCounts, config))
@@ -446,8 +494,8 @@
         }
         const projection = projectionMap.get(normalizeName(player.name));
         if (!projection) return { ...player, score: -2000, rankingModel: "think-rmv", rosterMarginalValue: 0, benchValue: 0, ecrAdjustmentPoints: 0, survivalCategory: "unknown", waitLoss: 0, reason: "missing auditable cardinal projection" };
-        const slots = OFFENSIVE_SLOTS.map((slot, index) => eligibleForSlot(position, slot) ? index : -1).filter((index) => index >= 0);
-        const withCandidate = optimizedOffensiveLineupValue([...baselineEntries, { value: projection.value, slots }]);
+        const slots = slotsForLeague.map((slot, index) => eligibleForSlot(position, slot) ? index : -1).filter((index) => index >= 0);
+        const withCandidate = optimizedOffensiveLineupValue([...baselineEntries, { value: projection.value, slots }], slotsForLeague);
         const rosterMarginalValue = Number.isFinite(baselineValue) && Number.isFinite(withCandidate) ? Math.max(0, withCandidate - baselineValue) : 0;
         const isBenchCandidate = rosterMarginalValue < 0.01;
         const nextCounts = { ...rosterByPosition, [position]: (rosterByPosition[position] || 0) + 1 };
@@ -500,6 +548,7 @@
       if (!["QB", "RB", "WR", "TE"].includes(positionKey(candidate.position)) || !Number.isFinite(candidate.utility)) continue;
       const fallback = candidates
         .filter((other) => other !== candidate && Number.isFinite(other.utility))
+        .filter((other) => positionKey(other.position) === positionKey(candidate.position))
         .filter((other) => !Number.isFinite(other.espnAdp) || other.espnAdp > nextPick - 2)
         .reduce((best, other) => Math.max(best, other.utility), 0);
       const factor = candidate.survivalCategory === "likely gone" ? 0.75
@@ -521,6 +570,7 @@
       rosterMax: { ...DEFAULT_CONFIG.rosterMax, ...(userConfig.rosterMax || {}) },
       starterSlots: { ...DEFAULT_CONFIG.starterSlots, ...(userConfig.starterSlots || {}) },
     };
+    players = players.filter(player => !isPlayerExcluded(player.name, config));
     const drafted = new Set((state.draftedNames || []).map(normalizeName));
     const roster = state.roster || [];
     const rosterCounts = countRoster(roster);
@@ -528,6 +578,29 @@
     const round = roundForPick(currentPick, config.teams);
     const nextPick = nextPickAfter(currentPick, config.draftSlot, config.teams, config.rounds);
     const opponentPicks = opponentPicksUntilNext(currentPick, config.draftSlot, config.teams, config.rounds);
+    if (config.rankingModel === "fantasypros-ecr") {
+      const offensiveConfig = { ...config, starterSlots: { ...config.starterSlots, DST: 0, K: 0 } };
+      const assigned = maxStarterAssignments(rosterCounts, offensiveConfig);
+      const required = Object.values(offensiveConfig.starterSlots).reduce((sum, count) => sum + count, 0);
+      return players.filter(player => Number.isFinite(player.fantasyProsRank))
+        .filter(player => !drafted.has(normalizeName(player.name)))
+        .filter(player => canDraftPosition(player.position, rosterCounts, config))
+        .filter(player => !isEarlyQbTeBlocked(player.position, round, config, rosterCounts))
+        .filter(player => {
+          const position = positionKey(player.position);
+          if (assigned >= required || position === "DST" || position === "K") return true;
+          // Fill offensive starters before taking offensive bench depth.
+          return maxStarterAssignments({ ...rosterCounts, [position]: (rosterCounts[position] || 0) + 1 }, offensiveConfig) > assigned;
+        })
+        .map(player => ({
+          ...player,
+          score: -player.fantasyProsRank + 100 * sharpRosterAdjustment(player, rosterCounts, round, config),
+          rankingModel: "fantasypros-ecr",
+          nextPick,
+          reason: `PPR consensus #${player.fantasyProsRank}${player.fantasyProsTier ? ", tier " + player.fantasyProsTier : ""}; adjusted for roster needs`,
+        }))
+        .sort((a,b) => b.score - a.score || a.fantasyProsRank - b.fantasyProsRank);
+    }
     const replacements = replacementPoints(players, config);
     const projectionPositionRanks = new Map();
     for (const position of ["QB", "RB", "WR", "TE"]) {
@@ -635,8 +708,39 @@
         : (a.fantasyProsRank ?? 999) - (b.fantasyProsRank ?? 999)));
   }
 
+  // Compare eight legal first choices with a freshly evaluated second choice.
+  // This is a bounded heuristic, not a full-draft optimizer.
+  function planTurn(players, state, userConfig, rankings) {
+    const config = {...DEFAULT_CONFIG, ...userConfig};
+    const pick = state.currentPick;
+    if (config.rankingModel !== "think-rmv" || !pick ||
+        overallPickFor(roundForPick(pick, config.teams), config.draftSlot, config.teams) !== pick ||
+        nextPickAfter(pick, config.draftSlot, config.teams, config.rounds) !== pick + 1) return null;
+    const firstChoices = (rankings || rankPlayers(players, state, config)).filter(player => !isPlayerExcluded(player.name, config)).slice(0, 8);
+    let best = null;
+    for (const first of firstChoices) {
+      const secondState = {...state, currentPick:pick + 1,
+        draftedNames:[...(state.draftedNames || []), first.name],
+        roster:[...(state.roster || []), {name:first.name, position:first.position}]};
+      const second = rankPlayers(players, secondState, config)[0];
+      if (!second) continue;
+      // Exclude ADP urgency: no opponent can take either player between these picks.
+      const value = (first.utility ?? first.score) + (second.utility ?? second.score);
+      if (!best || value > best.value) best = {first, second, value};
+    }
+    return best;
+  }
+
+  function isPlayerExcluded(name, config = {}) {
+    return (Array.isArray(config.excludedPlayers) ? config.excludedPlayers : ["Josh Jacobs"]).some(excluded => normalizeName(excluded) === normalizeName(name));
+  }
+
   root.DraftAssistantEngine = {
+    isPlayerExcluded,
+    planTurn,
     DEFAULT_CONFIG,
+    loadConfig,
+    validateDataset,
     normalizeName,
     nextPickAfter,
     opponentPicksUntilNext,

@@ -6,22 +6,34 @@ An open-source, local-only Chrome extension that overlays draft recommendations 
 
 The locally configured 2026 model can blend fields representing:
 
-- DraftSharks Half-PPR 3D value, projection range, injury risk, and overall rank.
-- FantasyPros Half-PPR expert consensus rank.
-- First Down Studio Vegas-derived Half-PPR projection, converted to value over replacement.
-- DraftSharks' ESPN ADP, used as the primary platform-specific timing signal. The currently available feed is ESPN PPR/12-team, so it is labeled as an approximation; Sleeper Half-PPR ADP remains a fallback only.
+- DraftSharks full-PPR 3D value, projection range, injury risk, and overall rank.
+- FantasyPros full-PPR expert consensus rank.
+- First Down Studio Vegas-derived full-PPR projection, converted to value over replacement.
+- DraftSharks' ESPN ADP, used as the primary platform-specific timing signal. Use ESPN PPR/12-team ADP when available; Sleeper full-PPR ADP remains a fallback only.
 
-The league preset is 10 teams, 17 rounds, one starting QB, two RB, two WR, one RB/WR, one FLEX, one TE, one D/ST, and one kicker. ESPN position maximums are enforced at QB 2, RB 8, WR 8, TE 3, D/ST 3, and K 3; unsupported TQB, IDP, punter, and head-coach positions remain unavailable.
+The league preset is 12 teams, 13 rounds, one starting QB, two RB, two WR, one FLEX, one TE, one D/ST, and one kicker. ESPN position maximums are enforced at QB 4, RB 8, WR 8, TE 3, D/ST 3, and K 3; unsupported TQB, IDP, punter, and head-coach positions remain unavailable.
 
 Recommendations are hard-filtered through those exact starter, bench, roster-size, and position-maximum rules. Near the end of the draft, the assistant reserves legal lineup space and will force a missing K, D/ST, or other required starter instead of suggesting a player ESPN can only place on an already-full bench.
 
+## This fork's league profile
+
+Default draft slot: **1**. The 13 snake picks are **1, 24, 25, 48, 49, 72, 73, 96, 97, 120, 121, 144, 145**. There are nine starters and four bench spots. Bench capacity can be stricter than a position cap: eight RBs cannot fit into two RB starters, one FLEX, and four bench spots.
+
+On first use after upgrading from the original league preset, saved lineup settings are migrated, the draft slot resets to 1, and auto-draft is disarmed. Recheck the slot in practice rooms, where ESPN may assign a different slot. Current-profile slot and model choices persist.
+
+The confirmed offensive scoring is 0.04 per passing yard, 4 per passing TD, -2 per interception, 0.1 per rushing or receiving yard, 6 per rushing or receiving TD, and 1 per reception. The passing and receiving TD bonus categories are +2 for 40+ yards and +3 for 50+ yards; all two-point conversion categories are +2. Lost fumbles are -2. Kicking includes 3/4/5/6 points for made field goals of 0–39/40–49/50–59/60+ yards, plus the configured missed-kick penalties. The complete offense, kicking, and D/ST weights are in `extension/lib/scoring.js`, verified against the ESPN league settings and supplied screenshots on September 5, 2026.
+
+The engine consumes already-scored projection totals, source values, and ranks. It does not infer raw statistics from aggregate totals or automatically convert half-PPR ranks into PPR. Optional raw-stat source projections are scored with the exact league weights before reaching the engine. All supplied signals must be generated for full PPR; custom bonuses must be included either in the supplied totals or in the raw-stat source projections. A generic PPR board is an approximation for this league until those bonuses are accounted for.
+
+Rankings must declare `meta.scoring: "ppr"` and `meta.leagueTeams: 12`. Missing, malformed, half-PPR, or explicitly synthetic example data shows an error in the draft room and prevents startup. Do not relabel half-PPR data. The included example has `meta.example: true` and cannot be used as a live ranking board.
+
 ## Ranking models
 
-The overlay and settings page expose five interchangeable models:
+The overlay and settings page support six models; the installed dataset enables only models with the required inputs:
 
-- **Think · Pro RMV experimental** implements the Extended Pro architecture with the data available locally. It builds a cardinal projection from 65% Vegas and 35% DraftSharks consensus projection, moves at most eight points toward positional FantasyPros ECR, calculates dynamic joint RB/WR/TE/RB-WR/FLEX replacement frontiers, and ranks candidates by the improvement to a completed legal lineup. ESPN ADP affects only categorical wait-versus-draft-now timing. Bench ceiling is separate and capped at ten points. Bench-only selections are blocked until all eight offensive starter assignments are filled; early QB2/TE2 picks are suppressed, and overstocked RB or WR benches receive a strong balance discount. This is an inspectable MVP: FantasyPros raw-stat projections, calibrated ESPN pick distributions, weekly injury availability, and matchup-based K/DST projections are not yet available.
-- **Sharp value · new** uses 55% DraftSharks 3D value, 35% FantasyPros Half-PPR ECR, and 10% Vegas value over replacement. DraftSharks ceiling and injury data make small adjustments. ESPN ADP controls timing and reach decisions, and a soft RB/WR balance penalty prevents extreme benches.
-- **Vegas 80 / DraftSharks 20 · RB/WR priority** uses 80% Vegas value over positional replacement and 20% DraftSharks 3D value. It adds a modest RB/WR scarcity premium and QB discount for this one-QB, multi-flex league, while retaining soft roster-balance and duplicate-QB safeguards.
+- **Think · Pro RMV experimental** implements the Extended Pro architecture with the data available locally. It builds a cardinal projection from 65% Vegas and 35% DraftSharks consensus projection, moves at most eight points toward positional FantasyPros ECR, calculates dynamic joint RB/WR/TE/FLEX replacement frontiers, and ranks candidates by the improvement to a completed legal lineup. ESPN ADP affects only categorical wait-versus-draft-now timing. Bench ceiling is separate and capped at ten points. Bench-only selections are blocked until all seven offensive starter assignments are filled; early QB2/TE2 picks are suppressed, and overstocked RB or WR benches receive a strong balance discount. This is an inspectable MVP: FantasyPros raw-stat projections, calibrated ESPN pick distributions, weekly injury availability, and matchup-based K/DST projections are not yet available.
+- **Sharp value · new** uses 55% DraftSharks 3D value, 35% FantasyPros full-PPR ECR, and 10% Vegas value over replacement. DraftSharks ceiling and injury data make small adjustments. ESPN ADP controls timing and reach decisions, and a soft RB/WR balance penalty prevents extreme benches.
+- **Vegas 80 / DraftSharks 20 · RB/WR priority** uses 80% Vegas value over positional replacement and 20% DraftSharks 3D value. It adds a modest RB/WR scarcity premium and QB discount for this one-QB, single-flex league, while retaining soft roster-balance and duplicate-QB safeguards.
 - **Vegas only · positional value** uses Vegas projections as its only player-data signal. It compares each player with the Vegas projection at his positional replacement frontier, preventing raw QB totals from overwhelming scarce RB/WR value. ADP, FantasyPros, and DraftSharks do not affect its order; legal-roster and duplicate-position safeguards still apply.
 - **Balanced v0.4 · backup** preserves the prior 55% FantasyPros and 45% Vegas formula, including its original ADP and roster adjustments.
 
@@ -50,9 +62,9 @@ While your team is on the clock, the overlay enables a **Draft [player] — Pick
 
 After an extension-triggered pick or failed lookup, the ESPN player search is cleared and blurred so the complete available-player board is visible again.
 
-The overlay includes an explicit **Arm auto-draft** / **Disarm auto-draft** button. Each pick gets one stable random trigger with 5–55 seconds remaining, allowing an early selection in a 60-second league while preserving the original late-clock range. The selected trigger is shown only while your team is on the clock. The unattended scheduler registers both a persistent Chrome alarm and an exact timer for the same idempotent action, so switching tabs or suspending the extension worker does not leave a single wake path. At the trigger it activates the ESPN tab, waits 750 ms for ESPN's React UI to resume, and then requires a visible, freshly synchronized page before drafting. This avoids background-tab throttling during 60-second real drafts. Any pick requiring ESPN search still uses a 10-second minimum. If a transient ESPN sync or lookup failure occurs before the safety cutoff, it makes one bounded retry; it never retries after a click or uncertain submission. The arm setting persists locally.
+The overlay includes an explicit **Arm auto-draft** / **Disarm auto-draft** button. Each pick gets one stable random trigger with 5–25 seconds remaining, allowing an early selection in a 30-second league while preserving the original late-clock range. The selected trigger is shown only while your team is on the clock. The unattended scheduler registers both a persistent Chrome alarm and an exact timer for the same idempotent action, so switching tabs or suspending the extension worker does not leave a single wake path. At the trigger it activates the ESPN tab, waits 750 ms for ESPN's React UI to resume, and then requires a visible, freshly synchronized page before drafting. This avoids background-tab throttling during 30-second real drafts. Any pick requiring ESPN search still uses a 10-second minimum. If a transient ESPN sync or lookup failure occurs before the safety cutoff, it makes one bounded retry; it never retries after a click or uncertain submission. The arm setting persists locally.
 
-While auto-draft is armed, the extension uses Chrome's system-awake guard so macOS does not sleep even if the display turns off. The guard is released when auto-draft is disarmed, the ESPN tab closes, or the 17-player roster is complete. The ESPN draft tab must remain open and signed in, with a working network connection.
+While auto-draft is armed, the extension uses Chrome's system-awake guard so macOS does not sleep even if the display turns off. The guard is released when auto-draft is disarmed, the ESPN tab closes, or the 13-player roster is complete. The ESPN draft tab must remain open and signed in, with a working network connection.
 
 The timer status explicitly shows **OFF**, **ARMED**, or **BLOCKED · ESPN AUTOPICK**. ESPN's own Autopick mode disables its player Draft buttons, so it must be disabled before the extension can submit a recommendation.
 
@@ -69,3 +81,55 @@ npm test
 ```
 
 Use ESPN Practice Drafts to validate the live selectors. The overlay's **Draft sync** section reports the current pick, detected drafted players, roster count, and visible available-player count. A manual drafted-player control is included as a fallback.
+
+## Practice checklist
+
+1. Supply a real full-PPR rankings file with the metadata above; reload the unpacked extension and the ESPN room.
+2. Keep auto-draft disarmed initially. Check the detected slot, roster, available players, and current pick against ESPN.
+3. In a 12-team practice draft, verify the slot-one 1/24/25 turn and that D/ST and K remain available for required final slots.
+4. Test the 5–25-second trigger window only in a practice room before relying on auto-draft.
+
+Automated tests cover all five models completing a legal 13-player roster, migration, the first-pick turn, timing bounds, and ranking metadata. Live ESPN selectors and click behavior still require a practice-room check.
+
+## Optional raw-stat projections
+
+A player may provide `statProjections` with any of `vegasPoints`, `draftSharksProjection`, and `draftSharksConsensusProjection` as keys. Each value is an object of projected ESPN category counts, for example:
+
+```json
+"statProjections": {
+  "vegasPoints": { "REC": 80, "REY": 1000, "RETD": 8, "RETD40": 2, "RETD50": 1 }
+}
+```
+
+This replaces that source's total with 235 league points; it does not add bonuses to an existing total. Omitted categories explicitly mean zero, so supply every category your projection models. Use ESPN-compatible category counts for overlapping TD/missed-field-goal categories; this module does not infer which counters an event qualifies for. For D/ST points/yards-allowed categories, provide expected games in each bucket, not season totals. Unknown categories and invalid counts produce a visible data error. ECR, ADP, and DraftSharks 3D values remain independent source inputs and are never converted from these totals.
+
+## Rankings-only exports
+
+A FantasyPros PPR export with ranks but no projections uses **FantasyPros PPR · rankings only**. Set `meta.rankingsOnly: true` to select this mode and disable models requiring unavailable inputs in the settings and overlay. It orders consensus ranks with roster-need adjustments, applies legal-roster filters, and does not invent projections, ADP, or bonus adjustments. `ECR VS. ADP` is not ESPN-specific ADP and is not used as such. Private imported data remains excluded from Git.
+
+Rankings-only mode fills offensive starter assignments before adding offensive bench depth. This is a roster-construction heuristic, not a projection model or a guarantee of draft grades. Defense names such as Texans D/ST and Houston Texans share one identity for drafted-player filtering.
+
+
+## FantasyPros projections and ESPN ADP
+
+Download FantasyPros season projections for QB, RB, WR and TE, plus the PPR ADP CSV. Preserve the downloaded filenames, then run:
+
+```powershell
+node scripts/import-fantasypros.mjs extension/data/rankings.json C:/path/to/downloads
+```
+
+The importer validates position-specific column layouts (including repeated YDS/TDS headers), joins names with position and team, reports unmatched rows, and reads only the ESPN ADP column. It replaces previous imported values so missing new data cannot retain stale projections. The private generated dataset stays ignored by Git.
+
+**Projection value + turn planning** uses FantasyPros raw stats recalculated with the league's base PPR weights, flex-aware marginal starter value, restrained bench value and ESPN ADP timing. ADP categories are heuristics, not calibrated probabilities. At consecutive picks it compares eight legal first choices with reevaluated second choices; this bounded search does not guarantee a globally optimal draft. Both mock QB/TE restrictions are optional and should normally remain off.
+
+The first load of the enriched data selects this model and disarms auto-draft. Rankings-only remains selectable. Models requiring Vegas or DraftSharks data stay disabled for this dataset. Long-TD, return and two-point projection categories are unavailable; no bonus estimates are invented. DST/K use positional ECR in the late rounds. Injury updates, weekly matchup projections and draft-grade prediction are not included. A live practice draft remains necessary after reloading the extension.
+
+## Availability exclusions
+
+Open **Availability / Do not draft** in the overlay to exclude a player by full name or remove an exclusion. Exclusions persist in Chrome settings and apply to every model, both turn-plan picks, and the final pre-submit check. They never count as drafted players. Removing a player allows the assistant to draft him again.
+
+Josh Jacobs is initially excluded with a linked Packers report (published September 1, reviewed September 5, 2026) describing exempt-list status and an uncertain return. This is a local reviewed status, not a live injury feed or a complete availability audit. Unlisted players are not certified healthy. Refresh the review before the real draft. Projection formulas are unchanged.
+
+### September 7 scoring update
+
+League screenshots confirm rushing touchdown bonus counters `RTD40: 2` and `RTD50: 3`. These are now supported alongside passing and receiving bonuses. Inputs must provide ESPN-compatible category counts; the scorer does not infer threshold overlap from touchdown lengths. Current FantasyPros projections omit these counters, so their base PPR totals remain unchanged.

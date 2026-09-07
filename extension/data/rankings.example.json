@@ -2,8 +2,9 @@
   "meta": {
     "generatedAt": "2026-01-01T00:00:00.000Z",
     "season": 2026,
-    "scoring": "half-ppr",
-    "leagueTeams": 10,
+    "scoring": "ppr",
+    "leagueTeams": 12,
+    "example": true,
     "sources": {},
     "unmatched": {}
   },

@@ -6,9 +6,9 @@ const engine = globalThis.DraftAssistantEngine;
 
 test("chooses an inclusive, bounded auto-draft trigger", () => {
   assert.equal(engine.chooseTriggerSeconds(5, 55, 0), 5);
-  assert.equal(engine.chooseTriggerSeconds(5, 55, 0.999999), 55);
+  assert.equal(engine.chooseTriggerSeconds(5, 55, 0.999999), 25);
   assert.equal(engine.chooseTriggerSeconds(20, 10, 0.5), 20);
-  assert.equal(engine.chooseTriggerSeconds(1, 99, 0.999999), 55);
+  assert.equal(engine.chooseTriggerSeconds(1, 99, 0.999999), 25);
 });
 
 test("guards the wall-clock window for a background auto-draft", () => {
@@ -136,7 +136,7 @@ test("does not add disappearance urgency between consecutive turn picks", () => 
     { name: "Turn Player A", position: "RB", fantasyProsRank: 10, vegasPoints: 220, sleeperAdp: 11 },
     { name: "Turn Player B", position: "WR", fantasyProsRank: 11, vegasPoints: 215, sleeperAdp: 40 },
   ];
-  const result = engine.rankPlayers(players, { currentPick: 10, draftedNames: [] }, { draftSlot: 10 });
+  const result = engine.rankPlayers(players, { currentPick: 10, draftedNames: [] }, { teams: 10, draftSlot: 10 });
   assert.equal(result[0].goneProbability, 0);
   assert.equal(result[1].goneProbability, 0);
 });
@@ -175,8 +175,8 @@ test("does not let raw quarterback points overwhelm early flex value", () => {
 test("forces a required starter when drafting another bench player would be illegal", () => {
   const roster = [
     ...Array.from({ length: 2 }, (_, index) => ({ name: `QB ${index}`, position: "QB" })),
-    ...Array.from({ length: 6 }, (_, index) => ({ name: `RB ${index}`, position: "RB" })),
-    ...Array.from({ length: 5 }, (_, index) => ({ name: `WR ${index}`, position: "WR" })),
+    ...Array.from({ length: 4 }, (_, index) => ({ name: `RB ${index}`, position: "RB" })),
+    ...Array.from({ length: 3 }, (_, index) => ({ name: `WR ${index}`, position: "WR" })),
     ...Array.from({ length: 2 }, (_, index) => ({ name: `TE ${index}`, position: "TE" })),
   ];
   const players = [
@@ -184,15 +184,15 @@ test("forces a required starter when drafting another bench player would be ille
     { name: "Available Defense", position: "DST", fantasyProsRank: 220, sleeperAdp: 160 },
     { name: "Available Kicker", position: "K", fantasyProsRank: 230, sleeperAdp: 165 },
   ];
-  const result = engine.rankPlayers(players, { currentPick: 151, draftedNames: [], roster }, { draftSlot: 1 });
+  const result = engine.rankPlayers(players, { currentPick: 144, draftedNames: [], roster }, { draftSlot: 1 });
   assert.deepEqual(result.map((player) => player.position).sort(), ["DST", "K"]);
 });
 
 test("allows only kicker when the bench and every other starter slot are full", () => {
   const roster = [
     ...Array.from({ length: 2 }, (_, index) => ({ name: `QB ${index}`, position: "QB" })),
-    ...Array.from({ length: 6 }, (_, index) => ({ name: `RB ${index}`, position: "RB" })),
-    ...Array.from({ length: 5 }, (_, index) => ({ name: `WR ${index}`, position: "WR" })),
+    ...Array.from({ length: 4 }, (_, index) => ({ name: `RB ${index}`, position: "RB" })),
+    ...Array.from({ length: 3 }, (_, index) => ({ name: `WR ${index}`, position: "WR" })),
     ...Array.from({ length: 2 }, (_, index) => ({ name: `TE ${index}`, position: "TE" })),
     { name: "Rostered Defense", position: "DST" },
   ];
@@ -201,7 +201,7 @@ test("allows only kicker when the bench and every other starter slot are full", 
     { name: "Second Defense", position: "DST", fantasyProsRank: 220, sleeperAdp: 160 },
     { name: "Available Kicker", position: "K", fantasyProsRank: 230, sleeperAdp: 165 },
   ];
-  const result = engine.rankPlayers(players, { currentPick: 161, draftedNames: [], roster }, { draftSlot: 1 });
+  const result = engine.rankPlayers(players, { currentPick: 145, draftedNames: [], roster }, { draftSlot: 1 });
   assert.deepEqual(result.map((player) => player.name), ["Available Kicker"]);
 });
 
@@ -209,9 +209,11 @@ test("hard-blocks players at the league position maximum", () => {
   const roster = [
     { name: "QB One", position: "QB" },
     { name: "QB Two", position: "QB" },
+    { name: "QB Three", position: "QB" },
+    { name: "QB Four", position: "QB" },
   ];
   const players = [
-    { name: "QB Three", position: "QB", fantasyProsRank: 1, vegasPoints: 400, sleeperAdp: 1 },
+    { name: "QB Five", position: "QB", fantasyProsRank: 1, vegasPoints: 400, sleeperAdp: 1 },
     { name: "Legal Running Back", position: "RB", fantasyProsRank: 50, vegasPoints: 180, sleeperAdp: 50 },
   ];
   const result = engine.rankPlayers(players, { currentPick: 21, draftedNames: [], roster }, { draftSlot: 1 });
@@ -219,8 +221,8 @@ test("hard-blocks players at the league position maximum", () => {
 });
 
 test("enforces every ESPN league position maximum and permits the final legal slot", () => {
-  const config = engine.DEFAULT_CONFIG;
-  for (const [position, maximum] of Object.entries({ QB: 2, RB: 8, WR: 8, TE: 3, DST: 3, K: 3 })) {
+  const config = { ...engine.DEFAULT_CONFIG, benchSlots: 10 }; // Isolate position caps from the stricter four-slot bench.
+  for (const [position, maximum] of Object.entries({ QB: 4, RB: 8, WR: 8, TE: 3, DST: 3, K: 3 })) {
     assert.equal(
       engine.canDraftPosition(position, { [position]: maximum - 1 }, config),
       true,

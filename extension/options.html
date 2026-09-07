@@ -10,20 +10,23 @@
     <main>
       <p class="eyebrow">GAME OF THROWNS</p>
       <h1>Draft Assistant Settings</h1>
-      <p>Configured for your 10-team, Half-PPR ESPN league. Rankings remain on this computer.</p>
+      <p>Configured for your 12-team, full-PPR ESPN league. Rankings remain on this computer.</p>
+      <p>13-round snake draft · 30 seconds per pick · default slot 1 (picks 1, 24, 25).<br>1 QB / 2 RB / 2 WR / 1 TE / 1 FLEX / 1 D/ST / 1 K / 4 bench.<br>Position caps: QB 4, RB 8, WR 8, TE 3, D/ST 3, K 3.</p>
+      <p>Supply full-PPR projections and rankings. Passing/receiving TD bonuses: 40+ yards +2, 50+ yards +3. Raw ESPN stat projections use the league scoring rules; supplied aggregate totals must already include them.</p>
       <form>
         <label>Ranking model
           <select name="rankingModel">
-            <option value="think-rmv">Think · Pro RMV experimental</option>
+            <option value="fantasypros-ecr">FantasyPros PPR · rankings only</option>
+              <option value="think-rmv">Projection value + turn planning</option>
             <option value="sharp-value">Sharp value · new</option>
             <option value="vegas-sharks-80">Vegas 80 / DraftSharks 20 · RB/WR priority</option>
             <option value="vegas-only">Vegas only · positional value</option>
             <option value="balanced-v04">Balanced v0.4 · backup</option>
           </select>
         </label>
-        <label>Draft slot <input name="draftSlot" type="number" min="1" max="10" placeholder="Randomized one hour before"></label>
+        <label>Draft slot <input name="draftSlot" type="number" min="1" max="12" value="1"></label>
         <label><input name="autoDraftEnabled" type="checkbox"> Arm automatic best-pick fallback</label>
-        <label>Draft with <input name="autoDraftMinSeconds" type="number" min="5" max="55" step="1"> to <input name="autoDraftMaxSeconds" type="number" min="5" max="55" step="1"> seconds remaining</label>
+        <label>Draft with <input name="autoDraftMinSeconds" type="number" min="5" max="25" step="1"> to <input name="autoDraftMaxSeconds" type="number" min="5" max="25" step="1"> seconds remaining</label>
         <button type="submit">Save settings</button>
         <output></output>
       </form>
